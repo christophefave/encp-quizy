@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quizy</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,9 +22,14 @@
                 extend: {
                     colors: {
                         encp: {
-                            blue: '#1e3a8a',   // Bleu profond
-                            orange: '#f97316', // Orange dynamique
+                            dark: '#310A27',
+                            orange: '#E05A00',
+                            lightpink: '#FAD4D8',
+                            darkpink: '#C94A65',
                         }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
                     }
                 }
             }
@@ -39,20 +48,30 @@
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Scrollbar personnalisée pour les menus déroulants */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col selection:bg-orange-200">
+<body class="bg-[#F9FAFB] text-gray-900 font-sans min-h-screen flex flex-col selection:bg-encp-lightpink selection:text-encp-dark">
 
     <!-- En-tête -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-2 font-bold text-xl text-encp-blue cursor-pointer" onclick="resetQuiz()">
-                <div class="w-8 h-8 bg-encp-orange rounded-lg flex items-center justify-center text-white">
-                    <i data-lucide="book-open" class="w-5 h-5"></i>
+    <header class="bg-encp-dark border-b border-encp-dark/80 sticky top-0 z-20 shadow-md overflow-hidden relative">
+        <!-- Decorative circles -->
+        <div class="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full border-4 border-white/5 pointer-events-none"></div>
+        <div class="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full border-4 border-white/5 pointer-events-none"></div>
+        
+        <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between relative z-10">
+            <div class="flex items-center gap-3 font-extrabold text-2xl text-white cursor-pointer tracking-tight hover:opacity-90 transition-opacity" onclick="resetQuiz()">
+                <div class="bg-white p-1.5 rounded-xl shadow-sm transform -rotate-3">
+                    <img src="logo.svg" alt="Quizy Logo" class="w-6 h-6" />
                 </div>
                 Quizy
             </div>
-            <button id="quit-btn" onclick="resetQuiz()" class="hidden text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+            <button id="quit-btn" onclick="resetQuiz()" class="hidden text-sm font-semibold text-encp-lightpink hover:text-white transition-colors bg-white/10 px-4 py-2 rounded-lg">
                 Quitter le quiz
             </button>
         </div>
@@ -154,6 +173,45 @@
           }
         ];
 
+        // --- GESTION DES MENUS DÉROULANTS ---
+        function toggleDropdown(id) {
+            ['file', 'theme'].forEach(otherId => {
+                if (otherId !== id) {
+                    const otherOptions = document.getElementById(`options-${otherId}`);
+                    const otherChevron = document.getElementById(`chevron-${otherId}`);
+                    if (otherOptions && !otherOptions.classList.contains('invisible')) {
+                        otherOptions.classList.add('invisible', 'opacity-0', '-translate-y-2');
+                        if (otherChevron) otherChevron.classList.remove('rotate-180');
+                    }
+                }
+            });
+
+            const options = document.getElementById(`options-${id}`);
+            const chevron = document.getElementById(`chevron-${id}`);
+            if (options) {
+                if (options.classList.contains('invisible')) {
+                    options.classList.remove('invisible', 'opacity-0', '-translate-y-2');
+                    if (chevron) chevron.classList.add('rotate-180');
+                } else {
+                    options.classList.add('invisible', 'opacity-0', '-translate-y-2');
+                    if (chevron) chevron.classList.remove('rotate-180');
+                }
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.custom-dropdown')) {
+                ['file', 'theme'].forEach(id => {
+                    const options = document.getElementById(`options-${id}`);
+                    const chevron = document.getElementById(`chevron-${id}`);
+                    if (options && !options.classList.contains('invisible')) {
+                        options.classList.add('invisible', 'opacity-0', '-translate-y-2');
+                        if (chevron) chevron.classList.remove('rotate-180');
+                    }
+                });
+            }
+        });
+
         // --- ÉTAT DE L'APPLICATION ---
         let state = {
             view: 'home', // 'home', 'training', 'test', 'results'
@@ -166,6 +224,14 @@
             selectedSubTheme: 'Toutes',
             subThemes: ['Toutes']
         };
+
+        // --- ANIMATION ---
+        function triggerAnimation() {
+            const app = document.getElementById('app');
+            app.classList.remove('fade-in');
+            void app.offsetWidth; // trigger reflow
+            app.classList.add('fade-in');
+        }
 
         // --- CHARGEMENT DES DONNÉES ---
         async function loadData() {
@@ -234,6 +300,7 @@
             state.showFeedback = false;
             state.view = mode;
             render();
+            triggerAnimation();
         }
 
         function handleAnswer(encodedAnswer) {
@@ -266,14 +333,17 @@
                 delete state.userAnswers[state.currentQuestionIndex];
                 state.showFeedback = false;
                 render();
+                triggerAnimation();
             } else {
                 if (state.currentQuestionIndex < state.filteredQuestions.length - 1) {
                     state.currentQuestionIndex++;
                     state.showFeedback = false;
                     render();
+                    triggerAnimation();
                 } else {
                     state.view = 'results';
                     render();
+                    triggerAnimation();
                 }
             }
         }
@@ -284,6 +354,7 @@
             state.userAnswers = {};
             state.showFeedback = false;
             render();
+            triggerAnimation();
         }
 
         // --- RENDU DE L'INTERFACE (VUES) ---
@@ -307,36 +378,87 @@
         }
 
         function renderHome() {
-            const optionsHtml = state.subThemes.map(t => 
-                `<option value="${t}" ${state.selectedSubTheme === t ? 'selected' : ''}>${t}</option>`
-            ).join('');
+            const files = [
+                { value: 'anatomie.json', label: 'Anatomie' },
+                { value: 'physiologie.json', label: 'Physiologie' },
+                { value: 'nutrition.json', label: 'Nutrition' }
+            ];
+            const selectedFileLabel = files.find(f => f.value === state.selectedFile)?.label || 'Anatomie';
+            
+            const fileOptionsHtml = files.map(f => `
+                <button onclick="handleFileChange('${f.value}')" class="w-full text-left px-4 py-3 rounded-xl transition-colors font-medium ${state.selectedFile === f.value ? 'bg-encp-lightpink/50 text-encp-darkpink' : 'hover:bg-gray-50 text-gray-700'}">
+                    ${f.label}
+                </button>
+            `).join('');
+
+            const themeOptionsHtml = state.subThemes.map(t => `
+                <button onclick="state.selectedSubTheme = '${t.replace(/'/g, "\\'")}'; render();" class="w-full text-left px-4 py-3 rounded-xl transition-colors font-medium ${state.selectedSubTheme === t ? 'bg-encp-lightpink/50 text-encp-darkpink' : 'hover:bg-gray-50 text-gray-700'}">
+                    ${t}
+                </button>
+            `).join('');
             
             return `
-            <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden fade-in">
-                <div class="bg-encp-blue p-8 text-center">
-                    <h1 class="text-3xl font-bold text-white mb-2">Quizy</h1>
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-encp-dark rounded-3xl shadow-2xl overflow-hidden mb-8 relative">
+                    <!-- Decorative circles -->
+                    <div class="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full border-4 border-white/5"></div>
+                    <div class="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 rounded-full border-4 border-white/5"></div>
+                    
+                    <div class="p-10 md:p-14 text-center relative z-10 flex flex-col items-center justify-center">
+                        <div class="bg-white p-4 rounded-3xl shadow-xl mb-6 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+                            <img src="logo.svg" alt="Quizy Logo" class="w-16 h-16" />
+                        </div>
+                        <h1 class="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">Prêt à tester vos connaissances ?</h1>
+                        <p class="text-encp-lightpink text-lg max-w-lg mx-auto">Sélectionnez une matière et une thématique pour commencer votre entraînement.</p>
+                    </div>
                 </div>
-                <div class="p-8 space-y-6">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Matière</label>
-                        <select onchange="handleFileChange(this.value)" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-encp-orange outline-none transition-all">
-                            <option value="anatomie.json" ${state.selectedFile === 'anatomie.json' ? 'selected' : ''}>Anatomie</option>
-                            <option value="physiologie.json" ${state.selectedFile === 'physiologie.json' ? 'selected' : ''}>Physiologie</option>
-                            <option value="nutrition.json" ${state.selectedFile === 'nutrition.json' ? 'selected' : ''}>Nutrition</option>
-                        </select>
+
+                <div class="bg-white rounded-3xl shadow-xl p-8 md:p-10 space-y-8 border border-gray-100">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="space-y-2 custom-dropdown">
+                            <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider">Matière</label>
+                            <div class="relative">
+                                <button onclick="toggleDropdown('file')" class="w-full p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl flex justify-between items-center focus:border-encp-orange outline-none transition-all font-medium text-gray-800 hover:border-gray-300">
+                                    <span>${selectedFileLabel}</span>
+                                    <i data-lucide="chevron-down" class="w-5 h-5 text-gray-500 transition-transform duration-200" id="chevron-file"></i>
+                                </button>
+                                <div id="options-file" class="absolute z-30 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible transform -translate-y-2 transition-all duration-200 overflow-hidden">
+                                    <div class="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                        ${fileOptionsHtml}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="space-y-2 custom-dropdown">
+                            <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider">Sous-thématique</label>
+                            <div class="relative">
+                                <button onclick="toggleDropdown('theme')" class="w-full p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl flex justify-between items-center focus:border-encp-orange outline-none transition-all font-medium text-gray-800 hover:border-gray-300">
+                                    <span class="truncate pr-4">${state.selectedSubTheme}</span>
+                                    <i data-lucide="chevron-down" class="w-5 h-5 text-gray-500 transition-transform duration-200 shrink-0" id="chevron-theme"></i>
+                                </button>
+                                <div id="options-theme" class="absolute z-30 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible transform -translate-y-2 transition-all duration-200 overflow-hidden">
+                                    <div class="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                        ${themeOptionsHtml}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Sous-thématique</label>
-                        <select onchange="state.selectedSubTheme = this.value; render();" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-encp-orange outline-none transition-all">
-                            ${optionsHtml}
-                        </select>
-                    </div>
-                    <div class="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button onclick="startQuiz('training')" class="flex items-center justify-center gap-2 bg-blue-50 text-encp-blue p-4 rounded-xl font-semibold hover:bg-blue-100 transition-colors">
-                            <i data-lucide="book-open" class="w-5 h-5"></i> Mode Entraînement
+
+                    <div class="pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <button onclick="startQuiz('training')" class="group relative flex flex-col items-center justify-center gap-3 bg-white border-2 border-encp-darkpink/20 hover:border-encp-darkpink text-encp-dark p-8 rounded-3xl font-bold transition-all hover:shadow-lg hover:-translate-y-1">
+                            <div class="w-16 h-16 bg-encp-lightpink rounded-2xl flex items-center justify-center text-encp-darkpink group-hover:scale-110 transition-transform">
+                                <i data-lucide="book-open" class="w-8 h-8"></i>
+                            </div>
+                            <span class="text-lg">Mode Entraînement</span>
+                            <span class="text-sm text-gray-500 font-normal text-center">Apprenez avec les corrections détaillées</span>
                         </button>
-                        <button onclick="startQuiz('test')" class="flex items-center justify-center gap-2 bg-encp-orange text-white p-4 rounded-xl font-semibold hover:bg-orange-600 transition-colors shadow-md shadow-orange-500/20">
-                            <i data-lucide="play" class="w-5 h-5"></i> Mode Test (20 Q)
+                        <button onclick="startQuiz('test')" class="group relative flex flex-col items-center justify-center gap-3 bg-encp-orange text-white p-8 rounded-3xl font-bold transition-all hover:bg-[#c95000] hover:shadow-xl hover:shadow-encp-orange/30 hover:-translate-y-1">
+                            <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                                <i data-lucide="play" class="w-8 h-8 fill-current"></i>
+                            </div>
+                            <span class="text-lg">Mode Test (20 Q)</span>
+                            <span class="text-sm text-white/80 font-normal text-center">Évaluez-vous en conditions réelles</span>
                         </button>
                     </div>
                 </div>
@@ -356,35 +478,35 @@
             let questionCounterHtml = '';
             
             if (isTraining) {
-                questionCounterHtml = `<span class="text-sm font-medium text-encp-blue">Question d'entraînement</span>`;
+                questionCounterHtml = `<span class="text-sm font-bold text-encp-darkpink bg-encp-lightpink px-3 py-1 rounded-full">Mode Entraînement</span>`;
             } else {
                 const progress = ((state.currentQuestionIndex + 1) / state.filteredQuestions.length) * 100;
-                questionCounterHtml = `<span class="text-sm font-medium text-encp-blue">Question ${state.currentQuestionIndex + 1} / ${state.filteredQuestions.length}</span>`;
+                questionCounterHtml = `<span class="text-sm font-bold text-encp-dark bg-gray-100 px-3 py-1 rounded-full">Question ${state.currentQuestionIndex + 1} / ${state.filteredQuestions.length}</span>`;
                 progressHtml = `
-                <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-encp-orange h-2.5 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
+                <div class="w-full bg-gray-200 rounded-full h-3 mb-6 overflow-hidden">
+                    <div class="bg-encp-orange h-full rounded-full transition-all duration-500 ease-out" style="width: ${progress}%"></div>
                 </div>`;
             }
             
             let optionsHtml = q.options.map((opt) => {
-                let btnClass = "w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between ";
+                let btnClass = "w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 flex items-center justify-between font-medium ";
                 let iconHtml = '';
                 
                 if (isTraining && isAnswered) {
                     if (opt === q.reponse) {
-                        btnClass += "border-green-500 bg-green-50 text-green-900";
+                        btnClass += "border-green-500 bg-green-50 text-green-900 shadow-sm";
                         iconHtml = `<i data-lucide="check-circle-2" class="text-green-500 w-6 h-6 ml-4 shrink-0"></i>`;
                     } else if (opt === userAnswer) {
-                        btnClass += "border-red-500 bg-red-50 text-red-900";
+                        btnClass += "border-red-500 bg-red-50 text-red-900 shadow-sm";
                         iconHtml = `<i data-lucide="x-circle" class="text-red-500 w-6 h-6 ml-4 shrink-0"></i>`;
                     } else {
-                        btnClass += "border-gray-100 bg-gray-50 text-gray-400 opacity-50";
+                        btnClass += "border-gray-100 bg-gray-50 text-gray-400 opacity-60";
                     }
                 } else if (!isTraining && isAnswered && opt === userAnswer) {
-                    btnClass += "border-encp-blue bg-blue-50 text-encp-blue";
-                    iconHtml = `<i data-lucide="check-circle-2" class="text-encp-blue w-6 h-6 ml-4 shrink-0"></i>`;
+                    btnClass += "border-encp-orange bg-orange-50 text-encp-orange shadow-sm";
+                    iconHtml = `<i data-lucide="check-circle-2" class="text-encp-orange w-6 h-6 ml-4 shrink-0"></i>`;
                 } else {
-                    btnClass += "border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700 cursor-pointer";
+                    btnClass += "border-gray-200 hover:border-encp-orange hover:bg-orange-50 text-gray-700 cursor-pointer hover:shadow-md";
                 }
                 
                 const safeOpt = encodeURIComponent(opt).replace(/'/g, "%27");
@@ -399,45 +521,45 @@
             let feedbackHtml = '';
             if (isTraining && state.showFeedback) {
                 feedbackHtml = `
-                <div class="bg-gray-50 border-t border-gray-100 p-6 md:p-8 fade-in">
-                    <h3 class="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                        <i data-lucide="book-open" class="text-encp-blue w-5 h-5"></i> Explication
+                <div class="bg-encp-lightpink/30 border-t-2 border-encp-lightpink p-6 md:p-8 fade-in">
+                    <h3 class="font-bold text-encp-dark mb-3 flex items-center gap-2 text-lg">
+                        <i data-lucide="lightbulb" class="text-encp-orange w-6 h-6"></i> Explication
                     </h3>
-                    <p class="text-gray-700 leading-relaxed">${q.feedback}</p>
+                    <p class="text-gray-800 leading-relaxed text-lg">${q.feedback}</p>
                 </div>`;
             }
             
             let nextBtnHtml = '';
             if (isAnswered && isTraining) {
                 nextBtnHtml = `
-                <div class="flex justify-end mt-6 fade-in">
-                    <button onclick="nextQuestion()" class="flex items-center gap-2 bg-encp-blue text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-md">
+                <div class="flex justify-end mt-8 fade-in">
+                    <button onclick="nextQuestion()" class="flex items-center gap-2 bg-encp-dark text-white px-8 py-4 rounded-2xl font-bold hover:bg-[#4a103c] transition-colors shadow-lg hover:-translate-y-1">
                         Question suivante <i data-lucide="arrow-right" class="w-5 h-5"></i>
                     </button>
                 </div>`;
             }
 
             return `
-            <div class="max-w-3xl mx-auto fade-in">
-                <div class="mb-8">
-                    <div class="flex justify-between items-end mb-2">
-                        <span class="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                            ${state.view === 'test' ? 'Test' : 'Entraînement'}
+            <div class="max-w-3xl mx-auto">
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-sm font-black text-gray-400 uppercase tracking-widest">
+                            ${state.view === 'test' ? 'Évaluation' : 'Pratique'}
                         </span>
                         ${questionCounterHtml}
                     </div>
                     ${progressHtml}
                 </div>
                 
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="p-6 md:p-8">
-                        <div class="inline-block px-3 py-1 bg-blue-50 text-blue-800 text-xs font-semibold rounded-full mb-4">
+                <div class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div class="p-8 md:p-10">
+                        <div class="inline-block px-4 py-1.5 bg-encp-lightpink text-encp-darkpink text-xs font-bold uppercase tracking-wider rounded-full mb-6">
                             ${q.sous_thematique}
                         </div>
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-8 leading-relaxed">
+                        <h2 class="text-2xl md:text-3xl font-extrabold text-encp-dark mb-10 leading-tight">
                             ${q.question}
                         </h2>
-                        <div class="space-y-3">
+                        <div class="space-y-4">
                             ${optionsHtml}
                         </div>
                     </div>
@@ -459,40 +581,40 @@
                 const isCorrect = state.userAnswers[idx] === q.reponse;
                 const borderClass = isCorrect ? 'border-l-green-500' : 'border-l-red-500';
                 const iconHtml = isCorrect 
-                    ? `<i data-lucide="check-circle-2" class="text-green-500 w-6 h-6"></i>` 
-                    : `<i data-lucide="x-circle" class="text-red-500 w-6 h-6"></i>`;
+                    ? `<div class="bg-green-100 p-2 rounded-full"><i data-lucide="check" class="text-green-600 w-6 h-6"></i></div>` 
+                    : `<div class="bg-red-100 p-2 rounded-full"><i data-lucide="x" class="text-red-600 w-6 h-6"></i></div>`;
                 
                 let correctAnsHtml = !isCorrect ? `
-                    <div class="bg-green-50 p-4 rounded-xl border border-green-100">
-                        <div class="text-xs font-semibold text-green-800 uppercase mb-1">Bonne réponse</div>
-                        <div class="font-medium text-green-900">${q.reponse}</div>
+                    <div class="bg-green-50 p-5 rounded-2xl border border-green-100">
+                        <div class="text-xs font-bold text-green-800 uppercase tracking-wider mb-2">Bonne réponse</div>
+                        <div class="font-semibold text-green-900 text-lg">${q.reponse}</div>
                     </div>
                 ` : '';
 
                 return `
-                <div class="bg-white rounded-2xl p-6 md:p-8 shadow-sm border-l-4 ${borderClass} mb-6">
-                    <div class="flex items-start gap-4 mb-4">
-                        <div class="mt-1 shrink-0">${iconHtml}</div>
+                <div class="bg-white rounded-3xl p-6 md:p-8 shadow-md border border-gray-100 border-l-8 ${borderClass} mb-6">
+                    <div class="flex items-start gap-5 mb-6">
+                        <div class="shrink-0 mt-1">${iconHtml}</div>
                         <div>
-                            <div class="text-sm font-medium text-gray-500 mb-1">Question ${idx + 1}</div>
-                            <h4 class="text-lg font-bold text-gray-900">${q.question}</h4>
+                            <div class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Question ${idx + 1}</div>
+                            <h4 class="text-xl font-bold text-encp-dark leading-snug">${q.question}</h4>
                         </div>
                     </div>
-                    <div class="ml-10 space-y-4">
+                    <div class="ml-14 space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Votre réponse</div>
-                                <div class="font-medium ${isCorrect ? 'text-green-700' : 'text-red-700'}">
+                            <div class="bg-gray-50 p-5 rounded-2xl border border-gray-200">
+                                <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Votre réponse</div>
+                                <div class="font-semibold text-lg ${isCorrect ? 'text-green-700' : 'text-red-700'}">
                                     ${state.userAnswers[idx] || "Aucune réponse"}
                                 </div>
                             </div>
                             ${correctAnsHtml}
                         </div>
-                        <div class="bg-blue-50 p-5 rounded-xl text-encp-blue mt-4">
-                            <div class="font-semibold mb-1 flex items-center gap-2">
-                                <i data-lucide="book-open" class="w-4 h-4"></i> Explication
+                        <div class="bg-encp-lightpink/30 p-6 rounded-2xl text-encp-dark mt-4 border border-encp-lightpink/50">
+                            <div class="font-bold mb-2 flex items-center gap-2 text-encp-darkpink">
+                                <i data-lucide="info" class="w-5 h-5"></i> Explication
                             </div>
-                            <p class="text-sm leading-relaxed opacity-90">${q.feedback}</p>
+                            <p class="text-base leading-relaxed text-gray-800">${q.feedback}</p>
                         </div>
                     </div>
                 </div>
@@ -500,31 +622,37 @@
             }).join('');
 
             return `
-            <div class="max-w-4xl mx-auto fade-in">
-                <div class="bg-white rounded-3xl shadow-xl overflow-hidden mb-8 text-center p-10 border border-gray-100">
-                    <div class="inline-flex items-center justify-center w-20 h-20 bg-orange-100 text-encp-orange rounded-full mb-6">
-                        <i data-lucide="award" class="w-10 h-10"></i>
-                    </div>
-                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Résultats du Test</h2>
-                    <p class="text-gray-500 mb-8">Voici votre score et la correction détaillée.</p>
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-encp-dark rounded-3xl shadow-2xl overflow-hidden mb-10 text-center p-12 relative">
+                    <!-- Decorative circles -->
+                    <div class="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full border-4 border-white/5"></div>
+                    <div class="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 rounded-full border-4 border-white/5"></div>
                     
-                    <div class="flex justify-center items-center gap-8 mb-10">
-                        <div class="text-center">
-                            <div class="text-5xl font-black text-encp-blue mb-1">${score}<span class="text-2xl text-gray-400">/${state.filteredQuestions.length}</span></div>
-                            <div class="text-sm font-medium text-gray-500 uppercase tracking-wider">Score</div>
+                    <div class="relative z-10">
+                        <div class="inline-flex items-center justify-center w-24 h-24 bg-encp-orange text-white rounded-full mb-6 shadow-lg shadow-encp-orange/40">
+                            <i data-lucide="award" class="w-12 h-12"></i>
                         </div>
-                        <div class="w-px h-16 bg-gray-200"></div>
-                        <div class="text-center">
-                            <div class="text-5xl font-black text-encp-orange mb-1">${percentage}%</div>
-                            <div class="text-sm font-medium text-gray-500 uppercase tracking-wider">Réussite</div>
+                        <h2 class="text-4xl font-extrabold text-white mb-3 tracking-tight">Résultats du Test</h2>
+                        <p class="text-encp-lightpink text-lg mb-10">Voici votre score et la correction détaillée.</p>
+                        
+                        <div class="flex justify-center items-center gap-12 mb-12 bg-white/10 p-8 rounded-3xl backdrop-blur-sm max-w-lg mx-auto">
+                            <div class="text-center">
+                                <div class="text-6xl font-black text-white mb-2">${score}<span class="text-3xl text-white/50">/${state.filteredQuestions.length}</span></div>
+                                <div class="text-sm font-bold text-encp-lightpink uppercase tracking-widest">Score</div>
+                            </div>
+                            <div class="w-px h-20 bg-white/20"></div>
+                            <div class="text-center">
+                                <div class="text-6xl font-black text-encp-orange mb-2">${percentage}%</div>
+                                <div class="text-sm font-bold text-encp-lightpink uppercase tracking-widest">Réussite</div>
+                            </div>
                         </div>
+                        <button onclick="resetQuiz()" class="inline-flex items-center gap-3 bg-white text-encp-dark px-10 py-5 rounded-2xl font-extrabold hover:bg-gray-100 transition-all shadow-xl hover:-translate-y-1 text-lg">
+                            <i data-lucide="rotate-ccw" class="w-6 h-6"></i> Nouveau Quiz
+                        </button>
                     </div>
-                    <button onclick="resetQuiz()" class="inline-flex items-center gap-2 bg-encp-blue text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-800 transition-colors shadow-lg">
-                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i> Nouveau Quiz
-                    </button>
                 </div>
-                <div class="space-y-6">
-                    <h3 class="text-2xl font-bold text-gray-900 px-2">Correction détaillée</h3>
+                <div class="space-y-8">
+                    <h3 class="text-3xl font-extrabold text-encp-dark px-2 tracking-tight">Correction détaillée</h3>
                     ${correctionsHtml}
                 </div>
             </div>
@@ -532,8 +660,9 @@
         }
 
         // --- DÉMARRAGE ---
-        window.onload = () => {
-            loadData();
+        window.onload = async () => {
+            await loadData();
+            triggerAnimation();
         };
     </script>
 </body>
