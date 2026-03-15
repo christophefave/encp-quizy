@@ -92,6 +92,7 @@
     </main>
 
     <!-- Logique de l'application (Vanilla JS) -->
+    <script type="module" src="/src/firebase.js"></script>
     <script>
         // --- DONNÉES DE SECOURS (Intégrées directement pour que ça marche même sans fichier externe) ---
         const fallbackData = [
@@ -222,8 +223,9 @@
         });
 
         // --- ÉTAT DE L'APPLICATION ---
-        let state = {
-            view: 'home', // 'home', 'training', 'test', 'results', 'training_results'
+        window.state = {
+            view: 'home', // 'home', 'training', 'test', 'challenge', 'results', 'training_results', 'challenge_form', 'high_scores'
+            quizMode: null, // 'training', 'test', 'challenge'
             allQuestions: [],
             filteredQuestions: [],
             currentQuestionIndex: 0,
@@ -232,19 +234,32 @@
             selectedFile: 'anatomie.json',
             selectedSubTheme: 'Toutes',
             subThemes: ['Toutes'],
-            trainingStats: { answered: 0, correct: 0 }
+            trainingStats: { answered: 0, correct: 0 },
+            challengeStartTime: null,
+            challengeEndTime: null,
+            challengeTime: null,
+            currentScore: null,
+            lastChallengeEntry: null
         };
+        // Pour compatibilité avec le code existant
+        let state = window.state;
 
         function saveState() {
             const stateToSave = {
                 view: state.view,
+                quizMode: state.quizMode,
                 filteredQuestions: state.filteredQuestions,
                 currentQuestionIndex: state.currentQuestionIndex,
                 userAnswers: state.userAnswers,
                 showFeedback: state.showFeedback,
                 selectedFile: state.selectedFile,
                 selectedSubTheme: state.selectedSubTheme,
-                trainingStats: state.trainingStats
+                trainingStats: state.trainingStats,
+                challengeStartTime: state.challengeStartTime,
+                challengeEndTime: state.challengeEndTime,
+                challengeTime: state.challengeTime,
+                currentScore: state.currentScore,
+                lastChallengeEntry: state.lastChallengeEntry
             };
             localStorage.setItem('quizy_state', JSON.stringify(stateToSave));
         }
@@ -314,27 +329,60 @@
             render();
         }
 
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
         // --- LOGIQUE DU QUIZ ---
+        let timerInterval = null;
+
+        function startChallengeTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const timerElement = document.getElementById('challenge-timer');
+                if (timerElement && state.challengeStartTime) {
+                    const elapsed = Date.now() - state.challengeStartTime;
+                    timerElement.innerHTML = formatChallengeTime(elapsed);
+                } else if (!timerElement) {
+                    // Stop timer if we are no longer in the challenge view
+                    clearInterval(timerInterval);
+                }
+            }, 100);
+        }
+
+        function formatChallengeTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            const tenths = Math.floor((ms % 1000) / 100);
+            return `${minutes}:${seconds}.${tenths}`;
+        }
+
         function startQuiz(mode) {
+            state.quizMode = mode;
             let questions = [...state.allQuestions];
             
             // Filtrage par sous-thématique
-            if (state.selectedSubTheme !== 'Toutes') {
+            if (mode !== 'challenge' && state.selectedSubTheme !== 'Toutes') {
                 questions = questions.filter(q => q.sous_thematique.includes(state.selectedSubTheme));
             }
             
-            // Mélange des questions (toujours aléatoire)
-            questions.sort(() => Math.random() - 0.5);
+            // Mélange des questions (Fisher-Yates)
+            shuffleArray(questions);
             
             // Mélange des options pour chaque question
             questions = questions.map(q => {
                 let opts = [...q.options];
-                opts.sort(() => Math.random() - 0.5);
+                shuffleArray(opts);
                 return { ...q, options: opts };
             });
 
-            // Mode Test : sélection de 20 max
-            if (mode === 'test') {
+            // Mode Test et Challenge : sélection de 20 max
+            if (mode === 'test' || mode === 'challenge') {
                 questions = questions.slice(0, 20);
             }
 
@@ -349,6 +397,12 @@
             state.showFeedback = false;
             state.trainingStats = { answered: 0, correct: 0 };
             state.view = mode;
+            
+            if (mode === 'challenge') {
+                state.challengeStartTime = Date.now();
+                startChallengeTimer();
+            }
+            
             saveState();
             render();
             triggerAnimation();
@@ -385,7 +439,13 @@
                 state.currentQuestionIndex++;
                 if (state.currentQuestionIndex >= state.filteredQuestions.length) {
                     // Remélanger les questions quand on arrive à la fin
-                    state.filteredQuestions.sort(() => Math.random() - 0.5);
+                    shuffleArray(state.filteredQuestions);
+                    // Remélanger les options pour chaque question
+                    state.filteredQuestions = state.filteredQuestions.map(q => {
+                        let opts = [...q.options];
+                        shuffleArray(opts);
+                        return { ...q, options: opts };
+                    });
                     state.currentQuestionIndex = 0;
                 }
                 // Nettoyer la réponse pour la nouvelle question
@@ -402,7 +462,25 @@
                     render();
                     triggerAnimation();
                 } else {
-                    state.view = 'results';
+                    if (state.view === 'challenge') {
+                        if (timerInterval) clearInterval(timerInterval);
+                        state.challengeEndTime = Date.now();
+                        state.challengeTime = state.challengeEndTime - state.challengeStartTime;
+                        
+                        let score = 0;
+                        state.filteredQuestions.forEach((q, idx) => {
+                            if (state.userAnswers[idx] === q.reponse) score++;
+                        });
+                        state.currentScore = score;
+                        
+                        if (score === state.filteredQuestions.length) {
+                            state.view = 'challenge_form';
+                        } else {
+                            state.view = 'high_scores';
+                        }
+                    } else {
+                        state.view = 'results';
+                    }
                     saveState();
                     render();
                     triggerAnimation();
@@ -422,25 +500,29 @@
         }
 
         function resetQuiz() {
+            if (timerInterval) clearInterval(timerInterval);
             state.view = 'home';
+            state.quizMode = null;
             state.currentQuestionIndex = 0;
             state.userAnswers = {};
             state.showFeedback = false;
             state.trainingStats = { answered: 0, correct: 0 };
+            state.currentScore = null;
+            state.lastChallengeEntry = null;
             localStorage.removeItem('quizy_state');
             render();
             triggerAnimation();
         }
 
         // --- RENDU DE L'INTERFACE (VUES) ---
-        function render() {
+        window.render = function render() {
             const app = document.getElementById('app');
             const quitBtn = document.getElementById('quit-btn');
             
             if (state.view === 'home') {
                 quitBtn.classList.add('hidden');
                 app.innerHTML = renderHome();
-            } else if (state.view === 'training' || state.view === 'test') {
+            } else if (state.view === 'training' || state.view === 'test' || state.view === 'challenge') {
                 quitBtn.classList.remove('hidden');
                 app.innerHTML = renderQuiz();
             } else if (state.view === 'results') {
@@ -449,6 +531,12 @@
             } else if (state.view === 'training_results') {
                 quitBtn.classList.add('hidden');
                 app.innerHTML = renderTrainingResults();
+            } else if (state.view === 'challenge_form') {
+                quitBtn.classList.add('hidden');
+                app.innerHTML = renderChallengeForm();
+            } else if (state.view === 'high_scores') {
+                quitBtn.classList.add('hidden');
+                app.innerHTML = renderHighScores();
             }
             
             // Initialiser les icônes Lucide après chaque mise à jour du DOM
@@ -528,15 +616,32 @@
                             <div class="w-16 h-16 bg-encp-lightpink rounded-2xl flex items-center justify-center text-encp-darkpink group-hover:scale-110 transition-transform">
                                 <i data-lucide="book-open" class="w-8 h-8"></i>
                             </div>
-                            <span class="text-lg">Mode Entraînement</span>
-                            <span class="text-sm text-gray-500 font-normal text-center">Apprenez avec les corrections détaillées</span>
+                            <span class="text-lg">Entraînement</span>
+                            <span class="text-sm text-gray-500 font-normal text-center">Avec corrections</span>
                         </button>
                         <button onclick="startQuiz('test')" class="group relative flex flex-col items-center justify-center gap-3 bg-encp-orange text-white p-8 rounded-3xl font-bold transition-all hover:bg-[#c95000] hover:shadow-xl hover:shadow-encp-orange/30 hover:-translate-y-1">
                             <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                                 <i data-lucide="play" class="w-8 h-8 fill-current"></i>
                             </div>
-                            <span class="text-lg">Mode Test (20 Q)</span>
-                            <span class="text-sm text-white/80 font-normal text-center">Évaluez-vous en conditions réelles</span>
+                            <span class="text-lg">Test (20 Q)</span>
+                            <span class="text-sm text-white/80 font-normal text-center">Conditions réelles</span>
+                        </button>
+                    </div>
+                    <div class="mt-6">
+                        <button onclick="startQuiz('challenge')" class="w-full group relative flex flex-col items-center justify-center gap-4 bg-encp-dark text-white p-8 rounded-3xl font-bold transition-all hover:bg-[#4a103c] hover:shadow-xl hover:shadow-encp-dark/30 hover:-translate-y-1">
+                            <div class="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-encp-orange group-hover:scale-110 transition-transform">
+                                <i data-lucide="timer" class="w-8 h-8"></i>
+                            </div>
+                            <span class="text-2xl">Mode Challenge</span>
+                            <span class="text-sm text-white/80 font-normal text-center max-w-lg leading-relaxed">
+                                <strong>Le but ultime :</strong> Obtenir 20/20 le plus rapidement possible !<br>
+                                Toutes les sous-thématiques sont mélangées. Seuls les sans-fautes entrent dans le classement des High Scores. Prêt à relever le défi ?
+                            </span>
+                        </button>
+                    </div>
+                    <div class="mt-8 flex justify-center">
+                        <button onclick="showHighScores()" class="flex items-center gap-2 text-encp-darkpink font-bold hover:text-encp-dark transition-colors bg-encp-lightpink/30 px-6 py-3 rounded-xl">
+                            <i data-lucide="trophy" class="w-5 h-5"></i> Voir les High Scores
                         </button>
                     </div>
                 </div>
@@ -557,6 +662,14 @@
             
             if (isTraining) {
                 questionCounterHtml = `<span class="text-sm font-bold text-encp-darkpink bg-encp-lightpink px-3 py-1 rounded-full">Mode Entraînement</span>`;
+            } else if (state.view === 'challenge') {
+                const progress = ((state.currentQuestionIndex + 1) / state.filteredQuestions.length) * 100;
+                questionCounterHtml = `<span class="text-sm font-bold text-white bg-encp-orange px-3 py-1 rounded-full flex items-center gap-1"><i data-lucide="timer" class="w-4 h-4"></i> Challenge ${state.currentQuestionIndex + 1} / ${state.filteredQuestions.length}</span>
+                                       <span id="challenge-timer" class="text-sm font-mono font-bold text-encp-orange bg-orange-100 px-3 py-1 rounded-full flex items-center gap-1 ml-2">00:00.0</span>`;
+                progressHtml = `
+                <div class="w-full bg-gray-200 rounded-full h-3 mb-6 overflow-hidden">
+                    <div class="bg-encp-orange h-full rounded-full transition-all duration-500 ease-out" style="width: ${progress}%"></div>
+                </div>`;
             } else {
                 const progress = ((state.currentQuestionIndex + 1) / state.filteredQuestions.length) * 100;
                 questionCounterHtml = `<span class="text-sm font-bold text-encp-dark bg-gray-100 px-3 py-1 rounded-full">Question ${state.currentQuestionIndex + 1} / ${state.filteredQuestions.length}</span>`;
@@ -622,7 +735,7 @@
                 <div class="mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <span class="text-sm font-black text-gray-400 uppercase tracking-widest">
-                            ${state.view === 'test' ? 'Évaluation' : 'Pratique'}
+                            ${state.view === 'test' ? 'Évaluation' : (state.view === 'challenge' ? 'Challenge' : 'Pratique')}
                         </span>
                         ${questionCounterHtml}
                     </div>
@@ -724,9 +837,20 @@
                                 <div class="text-sm font-bold text-encp-lightpink uppercase tracking-widest">Réussite</div>
                             </div>
                         </div>
-                        <button onclick="resetQuiz()" class="inline-flex items-center gap-3 bg-white text-encp-dark px-10 py-5 rounded-2xl font-extrabold hover:bg-gray-100 transition-all shadow-xl hover:-translate-y-1 text-lg">
-                            <i data-lucide="rotate-ccw" class="w-6 h-6"></i> Nouveau Quiz
-                        </button>
+                        <div class="flex flex-col sm:flex-row justify-center gap-4">
+                            ${state.quizMode === 'challenge' ? `
+                            <button onclick="startQuiz('challenge')" class="inline-flex items-center justify-center gap-3 bg-encp-orange text-white px-8 py-4 rounded-2xl font-extrabold hover:bg-[#c95000] transition-all shadow-xl hover:-translate-y-1 text-lg">
+                                <i data-lucide="rotate-cw" class="w-6 h-6"></i> Recommencer
+                            </button>
+                            ` : `
+                            <button onclick="startQuiz('${state.quizMode || 'test'}')" class="inline-flex items-center justify-center gap-3 bg-encp-orange text-white px-8 py-4 rounded-2xl font-extrabold hover:bg-[#c95000] transition-all shadow-xl hover:-translate-y-1 text-lg">
+                                <i data-lucide="rotate-cw" class="w-6 h-6"></i> Recommencer
+                            </button>
+                            `}
+                            <button onclick="resetQuiz()" class="inline-flex items-center justify-center gap-3 bg-white text-encp-dark px-8 py-4 rounded-2xl font-extrabold hover:bg-gray-100 transition-all shadow-xl hover:-translate-y-1 text-lg">
+                                <i data-lucide="home" class="w-6 h-6"></i> Accueil
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="space-y-8">
@@ -777,6 +901,219 @@
                         </div>
                         <button onclick="resetQuiz()" class="inline-flex items-center gap-3 bg-white text-encp-dark px-10 py-5 rounded-2xl font-extrabold hover:bg-gray-100 transition-all shadow-xl hover:-translate-y-1 text-lg">
                             <i data-lucide="home" class="w-6 h-6"></i> Quitter le rapport
+                        </button>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        function showHighScores() {
+            state.view = 'high_scores';
+            state.currentScore = null;
+            saveState();
+            render();
+            triggerAnimation();
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes}m ${seconds}s`;
+        }
+
+        function getHighScores() {
+            return window.firebaseHighScores || {};
+        }
+
+        async function submitChallenge(event) {
+            event.preventDefault();
+            const prenom = document.getElementById('c-prenom').value;
+            const promo = document.getElementById('c-promo').value;
+            const ville = document.getElementById('c-ville').value;
+            
+            const submitBtn = document.getElementById('submit-challenge-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin mx-auto"></i>';
+            lucide.createIcons();
+            
+            const entry = {
+                subject: state.selectedFile,
+                prenom,
+                promo,
+                ville,
+                time: state.challengeTime,
+                date: new Date().toISOString()
+            };
+            
+            if (window.submitFirebaseScore) {
+                await window.submitFirebaseScore(entry);
+                // On utilise le prénom et le temps comme identifiant temporaire pour le surlignage
+                state.lastChallengeEntry = entry.prenom + '_' + entry.time;
+            }
+            
+            state.view = 'high_scores';
+            saveState();
+            render();
+            triggerAnimation();
+        }
+
+        function renderChallengeForm() {
+            return `
+            <div class="max-w-xl mx-auto">
+                <div class="bg-white rounded-3xl shadow-xl p-8 md:p-10 border border-gray-100 text-center">
+                    <div class="inline-flex items-center justify-center w-20 h-20 bg-green-100 text-green-500 rounded-full mb-6">
+                        <i data-lucide="check-circle" class="w-10 h-10"></i>
+                    </div>
+                    <h2 class="text-3xl font-extrabold text-encp-dark mb-2">Incroyable ! 20/20 !</h2>
+                    <p class="text-gray-600 mb-8">Vous avez terminé en <strong class="text-encp-orange">${formatTime(state.challengeTime)}</strong>. Entrez vos informations pour le classement.</p>
+                    
+                    <form id="challenge-form" onsubmit="submitChallenge(event)" class="space-y-4 text-left">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Prénom</label>
+                            <input type="text" id="c-prenom" required class="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-encp-orange outline-none transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Promo</label>
+                            <input type="text" id="c-promo" required class="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-encp-orange outline-none transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Ville du campus</label>
+                            <input type="text" id="c-ville" required class="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-encp-orange outline-none transition-colors">
+                        </div>
+                        <button type="submit" id="submit-challenge-btn" class="w-full bg-encp-orange text-white font-bold py-4 rounded-xl hover:bg-[#c95000] transition-colors mt-4 shadow-lg disabled:opacity-70">
+                            Enregistrer mon score
+                        </button>
+                    </form>
+                </div>
+            </div>
+            `;
+        }
+
+        function renderHighScores() {
+            const scores = getHighScores();
+            const currentSubjectScores = scores[state.selectedFile] || [];
+            
+            let messageHtml = '';
+            let correctionBtnHtml = '';
+            let restartBtnHtml = '';
+            
+            if (state.currentScore !== null) {
+                if (state.currentScore === state.filteredQuestions.length) {
+                    messageHtml = `<div class="bg-green-100 text-green-800 p-4 rounded-xl mb-6 font-bold text-center">Votre score a été enregistré !</div>`;
+                } else {
+                    messageHtml = `<div class="bg-orange-100 text-orange-800 p-4 rounded-xl mb-6 font-bold text-center">Vous avez obtenu ${state.currentScore}/${state.filteredQuestions.length}. Il faut 20/20 pour entrer dans le classement !</div>`;
+                    correctionBtnHtml = `
+                        <button onclick="state.view = 'results'; render(); triggerAnimation();" class="w-full mb-4 flex items-center justify-center gap-2 bg-encp-darkpink text-white px-6 py-3 rounded-xl font-bold hover:bg-[#a03a50] transition-colors">
+                            <i data-lucide="file-check-2" class="w-5 h-5"></i> Voir la correction du quiz
+                        </button>
+                    `;
+                }
+                restartBtnHtml = `
+                    <button onclick="startQuiz('challenge')" class="w-full mb-4 flex items-center justify-center gap-2 bg-encp-orange text-white px-6 py-3 rounded-xl font-bold hover:bg-[#c95000] transition-colors">
+                        <i data-lucide="rotate-cw" class="w-5 h-5"></i> Recommencer le challenge
+                    </button>
+                `;
+            }
+            
+            const files = [
+                { value: 'anatomie.json', label: 'Anatomie' },
+                { value: 'physiologie.json', label: 'Physiologie' },
+                { value: 'nutrition.json', label: 'Nutrition' }
+            ];
+            
+            const tabsHtml = files.map(f => `
+                <button onclick="state.selectedFile = '${f.value}'; render();" class="px-4 py-2 text-sm font-bold rounded-lg transition-colors ${state.selectedFile === f.value ? 'bg-encp-dark text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                    ${f.label}
+                </button>
+            `).join('');
+
+            let tableHtml = '';
+            if (currentSubjectScores.length === 0) {
+                tableHtml = `<div class="text-center text-gray-500 py-8">Aucun score pour le moment. Soyez le premier !</div>`;
+            } else {
+                const top10 = currentSubjectScores.slice(0, 10);
+                let userRank = -1;
+                
+                if (state.lastChallengeEntry) {
+                    userRank = currentSubjectScores.findIndex(s => (s.prenom + '_' + s.time) === state.lastChallengeEntry) + 1;
+                }
+
+                tableHtml = `
+                <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                                <th class="p-4 font-bold">Rang</th>
+                                <th class="p-4 font-bold">Joueur</th>
+                                <th class="p-4 font-bold">Campus</th>
+                                <th class="p-4 font-bold text-right">Temps</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${top10.map((s, idx) => {
+                                const isUser = (s.prenom + '_' + s.time) === state.lastChallengeEntry;
+                                let rankBadge = `${idx + 1}`;
+                                if (idx === 0) rankBadge = `<span class="text-yellow-500"><i data-lucide="trophy" class="w-5 h-5 inline"></i></span>`;
+                                else if (idx === 1) rankBadge = `<span class="text-gray-400"><i data-lucide="medal" class="w-5 h-5 inline"></i></span>`;
+                                else if (idx === 2) rankBadge = `<span class="text-amber-600"><i data-lucide="medal" class="w-5 h-5 inline"></i></span>`;
+                                
+                                return `
+                                <tr class="${isUser ? 'bg-encp-lightpink/30' : 'bg-white'}">
+                                    <td class="p-4 font-bold text-gray-700">${rankBadge}</td>
+                                    <td class="p-4">
+                                        <div class="font-bold text-encp-dark">${s.prenom}</div>
+                                        <div class="text-xs text-gray-500">Promo ${s.promo}</div>
+                                    </td>
+                                    <td class="p-4 text-sm text-gray-600">${s.ville}</td>
+                                    <td class="p-4 text-right font-mono font-bold text-encp-orange">${formatTime(s.time)}</td>
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                `;
+                
+                if (userRank > 10) {
+                    const s = currentSubjectScores[userRank - 1];
+                    tableHtml += `
+                    <div class="mt-4 p-4 bg-encp-lightpink/30 rounded-xl border border-encp-lightpink flex justify-between items-center">
+                        <div class="flex items-center gap-4">
+                            <div class="font-bold text-gray-700">#${userRank}</div>
+                            <div>
+                                <div class="font-bold text-encp-dark">${s.prenom}</div>
+                                <div class="text-xs text-gray-500">Promo ${s.promo}</div>
+                            </div>
+                        </div>
+                        <div class="font-mono font-bold text-encp-orange">${formatTime(s.time)}</div>
+                    </div>
+                    `;
+                }
+            }
+
+            return `
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-white rounded-3xl shadow-xl p-8 md:p-10 border border-gray-100">
+                    <div class="flex items-center justify-center gap-3 mb-8">
+                        <i data-lucide="trophy" class="w-8 h-8 text-encp-orange"></i>
+                        <h2 class="text-3xl font-extrabold text-encp-dark">High Scores</h2>
+                    </div>
+                    
+                    ${messageHtml}
+                    
+                    <div class="flex flex-wrap gap-2 justify-center mb-6">
+                        ${tabsHtml}
+                    </div>
+                    
+                    ${tableHtml}
+                    
+                    <div class="mt-8">
+                        ${correctionBtnHtml}
+                        ${restartBtnHtml}
+                        <button onclick="resetQuiz()" class="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">
+                            <i data-lucide="home" class="w-5 h-5"></i> Retour à l'accueil
                         </button>
                     </div>
                 </div>
