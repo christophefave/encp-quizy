@@ -92,7 +92,56 @@
     </main>
 
     <!-- Logique de l'application (Vanilla JS) -->
-    <script type="module" src="/src/firebase.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script>
+    // 1. TA CONFIGURATION (Copie celle de ta console Firebase ici)
+    const firebaseConfig = {
+        apiKey: "AIzaSyBf1CKN-uw7p_6Ud_K13YpC5gcHdZ_wzG8",
+        authDomain: "quizy-9f784.firebaseapp.com",
+        projectId: "quizy-9f784",
+        storageBucket: "quizy-9f784.firebasestorage.app",
+        messagingSenderId: "217535736846",
+        appId: "1:217535736846:web:bfebc9087904b0bf72605f"
+    };
+
+    // 2. INITIALISATION
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // 3. FONCTION POUR ENVOYER LE SCORE
+    window.submitFirebaseScore = async (entry) => {
+        try {
+            await db.collection("highscores").add({
+                prenom: entry.prenom,
+                promo: entry.promo,
+                ville: entry.ville,
+                time: entry.time,
+                subject: entry.subject,
+                date: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await refreshHighScores(); // Recharge les scores après l'envoi
+        } catch (e) {
+            console.error("Erreur Firebase : ", e);
+        }
+    };
+
+    // 4. FONCTION POUR RÉCUPÉRER LES SCORES
+    window.refreshHighScores = async () => {
+        const snapshot = await db.collection("highscores").orderBy("time", "asc").get();
+        const scores = {};
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (!scores[data.subject]) scores[data.subject] = [];
+            scores[data.subject].push(data);
+        });
+        window.firebaseHighScores = scores;
+    };
+
+    // Charger les scores au démarrage
+    window.refreshHighScores();
+    </script>
     <script>
         // --- DONNÉES DE SECOURS (Intégrées directement pour que ça marche même sans fichier externe) ---
         const fallbackData = [
