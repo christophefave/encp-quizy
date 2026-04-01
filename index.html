@@ -110,23 +110,51 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // 3. FONCTION POUR ENVOYER LE SCORE
+    // 3. FONCTION POUR ENVOYER LE SCORE (AVEC VÉRIFICATION DU MEILLEUR TEMPS)
     window.submitFirebaseScore = async (entry) => {
         try {
-            await db.collection("highscores").add({
-                prenom: entry.prenom,
-                promo: entry.promo,
-                ville: entry.ville,
-                time: entry.time,
-                subject: entry.subject,
-                date: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            // On cherche si le joueur existe déjà pour cette matière
+            const querySnapshot = await db.collection("highscores")
+                .where("prenom", "==", entry.prenom)
+                .where("promo", "==", entry.promo)
+                .where("ville", "==", entry.ville)
+                .where("subject", "==", entry.subject)
+                .get();
+
+            if (!querySnapshot.empty) {
+                // Le joueur existe déjà
+                const doc = querySnapshot.docs[0];
+                const existingData = doc.data();
+
+                // On ne met à jour que si le nouveau temps est MEILLEUR (plus petit)
+                if (entry.time < existingData.time) {
+                    await db.collection("highscores").doc(doc.id).update({
+                        time: entry.time,
+                        date: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log("Record battu ! Mise à jour effectuée.");
+                } else {
+                    console.log("Score moins bon que le record actuel. Pas de mise à jour.");
+                }
+            } else {
+                // Le joueur n'existe pas encore, on crée l'entrée
+                await db.collection("highscores").add({
+                    prenom: entry.prenom,
+                    promo: entry.promo,
+                    ville: entry.ville,
+                    time: entry.time,
+                    subject: entry.subject,
+                    date: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log("Premier score enregistré pour ce joueur.");
+            }
+
             await refreshHighScores(); // Recharge les scores après l'envoi
         } catch (e) {
             console.error("Erreur Firebase : ", e);
         }
     };
-
+        
     // 4. FONCTION POUR RÉCUPÉRER LES SCORES
     window.refreshHighScores = async () => {
         const snapshot = await db.collection("highscores").orderBy("time", "asc").get();
