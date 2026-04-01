@@ -110,10 +110,10 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // 3. FONCTION POUR ENVOYER LE SCORE (AVEC VÉRIFICATION DU MEILLEUR TEMPS)
+    // 3. FONCTION POUR ENVOYER LE SCORE (AVEC NOTIFICATION MAIL)
     window.submitFirebaseScore = async (entry) => {
         try {
-            // On cherche si le joueur existe déjà pour cette matière
+            // A. On cherche si le joueur existe déjà pour cette matière
             const querySnapshot = await db.collection("highscores")
                 .where("prenom", "==", entry.prenom)
                 .where("promo", "==", entry.promo)
@@ -121,23 +121,25 @@
                 .where("subject", "==", entry.subject)
                 .get();
 
+            let isNewRecord = false;
+            let docId = null;
+
             if (!querySnapshot.empty) {
-                // Le joueur existe déjà
+                // Le joueur existe : on compare les temps
                 const doc = querySnapshot.docs[0];
                 const existingData = doc.data();
+                docId = doc.id;
 
-                // On ne met à jour que si le nouveau temps est MEILLEUR (plus petit)
                 if (entry.time < existingData.time) {
-                    await db.collection("highscores").doc(doc.id).update({
+                    // Record battu !
+                    await db.collection("highscores").doc(docId).update({
                         time: entry.time,
                         date: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    console.log("Record battu ! Mise à jour effectuée.");
-                } else {
-                    console.log("Score moins bon que le record actuel. Pas de mise à jour.");
+                    isNewRecord = true;
                 }
             } else {
-                // Le joueur n'existe pas encore, on crée l'entrée
+                // Nouveau joueur : on crée l'entrée
                 await db.collection("highscores").add({
                     prenom: entry.prenom,
                     promo: entry.promo,
@@ -146,12 +148,32 @@
                     subject: entry.subject,
                     date: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                console.log("Premier score enregistré pour ce joueur.");
+                isNewRecord = true;
             }
 
-            await refreshHighScores(); // Recharge les scores après l'envoi
+            // B. ENVOI DE LA NOTIFICATION (Uniquement si c'est un nouveau record)
+            if (isNewRecord) {
+                fetch("https://api.web3forms.com/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({
+                        access_key: "COLLE_TA_CLE_ICI", // <--- TA CLÉ ICI
+                        subject: `🏆 Nouveau Record : ${entry.prenom} (${entry.subject})`,
+                        from_name: "Mon Quiz Apps",
+                        message: `Nouveau score enregistré !
+                        
+                        Prénom : ${entry.prenom}
+                        Promo : ${entry.promo}
+                        Ville : ${entry.ville}
+                        Matière : ${entry.subject}
+                        Temps : ${entry.time} secondes`
+                    })
+                });
+            }
+
+            await refreshHighScores(); 
         } catch (e) {
-            console.error("Erreur Firebase : ", e);
+            console.error("Erreur complète : ", e);
         }
     };
         
